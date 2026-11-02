@@ -1,0 +1,19 @@
+# Environment variables
+.env
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Pytest
+.pytest_cache/
+
+# Local SQLite databases (optional, production uses PostgreSQL)
+*.db
+*.sqlite3
+
+# IDE / Editor
+.vscode/
+.idea/

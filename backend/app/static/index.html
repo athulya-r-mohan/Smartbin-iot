@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Waste Bin — IoT Live Monitoring</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- Chart.js for real-time historical trends -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Header -->
+    <header class="navbar">
+      <div class="brand">
+        <span class="logo-icon">🗑️</span>
+        <div>
+          <h1>SmartBin IoT Monitor</h1>
+          <p class="subtitle">Live Waste Level & Danger Detection System</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="badge-status" id="backendBadge">
+          <span class="dot connected"></span> Backend: <span id="backendStatusText">Connected</span>
+        </div>
+        <div class="badge-status" id="esp32Badge">
+          <span class="dot offline"></span> ESP32: <span id="esp32StatusText">Offline</span>
+        </div>
+        <button id="soundToggleBtn" class="btn btn-audio" onclick="toggleSound()">
+          🔔 Enable Sound Alerts
+        </button>
+      </div>
+    </header>
+
+    <!-- Danger Alert Banner (Hidden by default) -->
+    <div id="dangerBanner" class="alert-banner hidden">
+      <div class="banner-content">
+        <span class="banner-icon">🚨</span>
+        <div class="banner-text">
+          <strong>CRITICAL DANGER: BIN CAPACITY EXCEEDS 80%!</strong>
+          <span>Immediate disposal required to prevent overflow.</span>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-dismiss" onclick="dismissDangerAlert()">Mute Alert</button>
+    </div>
+
+    <!-- Main Grid Content -->
+    <main class="dashboard-grid">
+      <!-- Left Column: Visual Bin & Gauge -->
+      <section class="card bin-card">
+        <div class="card-header">
+          <h2>Live Bin Fill Status</h2>
+          <span class="status-pill status-low" id="statusPill">LOW</span>
+        </div>
+
+        <div class="bin-visualization-container">
+          <!-- Realistic Smart Waste Bin Visual -->
+          <div class="smart-bin">
+            <div class="bin-lid">
+              <div class="sensor-indicator" id="sensorIndicator" title="HC-SR04 Ultrasonic Sensor">
+                <span class="sensor-eye"></span>
+                <span class="sensor-eye"></span>
+              </div>
+            </div>
+            <div class="bin-body">
+              <div class="bin-fill" id="binFill">
+                <div class="wave"></div>
+                <div class="wave wave-back"></div>
+              </div>
+              <div class="bin-grid-lines">
+                <span class="line-label line-80">80% Danger</span>
+                <span class="line-label line-50">50% Medium</span>
+                <span class="line-label line-25">25% Low</span>
+              </div>
+            </div>
+            <div class="bin-base"></div>
+          </div>
+
+          <!-- Big Metric Readout -->
+          <div class="readout-panel">
+            <div class="big-metric">
+              <span class="metric-number" id="percentageVal">--</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <p class="metric-label">Current Bin Fill</p>
+
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+
+            <div class="metric-subgrid">
+              <div class="sub-metric-box">
+                <span class="sub-label">Sensor Distance</span>
+                <span class="sub-value" id="distanceVal">-- cm</span>
+              </div>
+              <div class="sub-metric-box">
+                <span class="sub-label">Current Status</span>
+                <span class="sub-value" id="statusVal">--</span>
+              </div>
+              <div class="sub-metric-box">
+                <span class="sub-label">Sensor Health</span>
+                <span class="sub-value" id="sensorValidVal">--</span>
+              </div>
+              <div class="sub-metric-box">
+                <span class="sub-label">Last Updated</span>
+                <span class="sub-value" id="lastUpdatedVal">--:--:--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Status Threshold Cards & College Hotspot Settings -->
+      <section class="right-column">
+        <!-- Status Guide Card -->
+        <div class="card">
+          <div class="card-header">
+            <h2>Threshold Levels</h2>
+          </div>
+          <div class="threshold-indicators">
+            <div class="threshold-chip chip-low" id="chipLow">
+              <span class="chip-color"></span>
+              <div>
+                <strong>Low (0% – 49%)</strong>
+                <p>Normal operating capacity</p>
+              </div>
+            </div>
+            <div class="threshold-chip chip-medium" id="chipMedium">
+              <span class="chip-color"></span>
+              <div>
+                <strong>Medium (50% – 74%)</strong>
+                <p>Waste accumulating</p>
+              </div>
+            </div>
+            <div class="threshold-chip chip-full" id="chipFull">
+              <span class="chip-color"></span>
+              <div>
+                <strong>Full (75% – 79%)</strong>
+                <p>Nearly full, prepare bin bag</p>
+              </div>
+            </div>
+            <div class="threshold-chip chip-danger" id="chipDanger">
+              <span class="chip-color"></span>
+              <div>
+                <strong>Danger (≥ 80%)</strong>
+                <p>Sound alarm & alert triggered</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hotspot / ESP32 IP Configuration Card -->
+        <div class="card hotspot-card">
+          <div class="card-header">
+            <h2>WiFi / College Hotspot Config</h2>
+          </div>
+          <p class="card-hint">
+            Update your ESP32 IP address easily when connecting via phone hotspot or college WiFi without rebuilding:
+          </p>
+          <div class="ip-form">
+            <input type="text" id="targetIpInput" placeholder="e.g. 192.168.43.105" />
+            <button class="btn btn-primary" onclick="updateTargetIp()">Save Target IP</button>
+          </div>
+          <div class="current-target-info">
+            <span>Current Target URL:</span>
+            <code id="currentTargetUrl">http://.../data</code>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom Full-Width: Historical Trends Chart -->
+      <section class="card chart-card">
+        <div class="card-header">
+          <div>
+            <h2>Historical Fill Trends</h2>
+            <p class="subtitle">Persisted time-series data logged into PostgreSQL</p>
+          </div>
+          <div class="chart-controls">
+            <button class="btn btn-sm btn-outline" onclick="fetchHistory()">Refresh Data</button>
+            <button class="btn btn-sm btn-outline" onclick="simulateTestReading()">Send Test Reading</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="historyChart"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Smart Bin IoT Monitoring System • FastAPI • PostgreSQL • ESP32 • Docker</p>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
