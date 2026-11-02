@@ -30,6 +30,7 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 client = TestClient(app)
+AUTH_HEADERS = {"X-API-Key": "smartbin_secret_key_2026"}
 
 @pytest.fixture(autouse=True)
 def run_around_tests():
@@ -50,15 +51,31 @@ def test_status_calculation():
     assert calculate_status(95, True) == "DANGER"
     assert calculate_status(50, False) == "INVALID"
 
+def test_api_key_authentication():
+    """Verify that requests without or with wrong API key are rejected with 401"""
+    payload = {"distance_cm": 10.0, "fill_percentage": 50, "is_valid": True}
+    
+    # Missing API Key
+    res_no_key = client.post("/api/readings", json=payload)
+    assert res_no_key.status_code == 401
+    
+    # Invalid API Key
+    res_bad_key = client.post("/api/readings", json=payload, headers={"X-API-Key": "wrong_key"})
+    assert res_bad_key.status_code == 401
+
+    # Valid API Key
+    res_valid = client.post("/api/readings", json=payload, headers=AUTH_HEADERS)
+    assert res_valid.status_code == 200
+
 def test_create_and_get_reading():
-    """Test creating a sensor reading and retrieving it"""
+    """Test creating a sensor reading with valid API key and retrieving it"""
     payload = {
         "distance_cm": 14.5,
         "fill_percentage": 25,
         "is_valid": True,
         "source": "TEST"
     }
-    response = client.post("/api/readings", json=payload)
+    response = client.post("/api/readings", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["fill_percentage"] == 25
@@ -75,7 +92,7 @@ def test_danger_status_at_80_percent():
         "is_valid": True,
         "source": "ESP32"
     }
-    response = client.post("/api/readings", json=payload)
+    response = client.post("/api/readings", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 200
     data = response.json()
     assert data["fill_percentage"] == 82
@@ -89,7 +106,7 @@ def test_latest_reading_and_stats():
         {"distance_cm": 5.0, "fill_percentage": 85, "is_valid": True},
     ]
     for r in readings:
-        client.post("/api/readings", json=r)
+        client.post("/api/readings", json=r, headers=AUTH_HEADERS)
 
     # Check latest
     latest_res = client.get("/api/readings/latest")
@@ -124,11 +141,9 @@ def test_latest_reading_and_stats():
 
 def test_update_esp32_ip_hotspot():
     """Test dynamically changing the ESP32 IP address for college hotspot use"""
-    # Read initial config
     cfg_res = client.get("/api/config")
     assert cfg_res.status_code == 200
 
-    # Update to a new mobile hotspot IP
     new_ip = "192.168.43.188"
     update_res = client.post("/api/config/esp32-ip", json={"esp32_ip": new_ip, "esp32_port": 80})
     assert update_res.status_code == 200
@@ -138,8 +153,7 @@ def test_update_esp32_ip_hotspot():
 
 def test_websocket_connection():
     """Test that WebSocket connects and receives initial state"""
-    # Insert one reading first
-    client.post("/api/readings", json={"distance_cm": 12.0, "fill_percentage": 40, "is_valid": True})
+    client.post("/api/readings", json={"distance_cm": 12.0, "fill_percentage": 40, "is_valid": True}, headers=AUTH_HEADERS)
 
     with client.websocket_connect("/ws") as websocket:
         data = websocket.receive_json()

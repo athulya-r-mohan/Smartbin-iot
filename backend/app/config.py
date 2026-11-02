@@ -4,6 +4,8 @@ from typing import Optional
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Smart Waste Bin IoT System"
+    API_KEY: str = "smartbin_secret_key_2026"
+    ENABLE_POLLER: bool = False
     ESP32_IP: str = "192.168.1.100"
     ESP32_PORT: int = 80
     POLL_INTERVAL_SECONDS: float = 2.0
@@ -23,7 +25,7 @@ runtime_config = {
     "esp32_ip": settings.ESP32_IP,
     "esp32_port": settings.ESP32_PORT,
     "poll_interval": settings.POLL_INTERVAL_SECONDS,
-    "polling_enabled": True
+    "polling_enabled": settings.ENABLE_POLLER
 }
 
 def get_esp32_url() -> str:

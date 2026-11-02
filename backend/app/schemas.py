@@ -12,7 +12,8 @@ class ReadingCreate(BaseModel):
     distance_cm: float
     fill_percentage: int
     is_valid: bool = True
-    source: Optional[str] = "MANUAL"
+    source: Optional[str] = "ESP32_DIRECT"
+    api_key: Optional[str] = None
 
 class ReadingResponse(BaseModel):
     id: int

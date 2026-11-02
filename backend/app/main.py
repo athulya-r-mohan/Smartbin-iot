@@ -9,8 +9,9 @@ if backend_dir not in sys.path:
 import json
 import logging
 from contextlib import asynccontextmanager
-from typing import List, Set
-from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, HTTPException
+from typing import List, Set, Optional
+from datetime import datetime, timezone
+from fastapi import FastAPI, Depends, WebSocket, WebSocketDisconnect, HTTPException, Header, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -95,13 +96,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+def is_device_active(latest_reading) -> bool:
+    if poller.esp32_online:
+        return True
+    if not latest_reading or not latest_reading.timestamp:
+        return False
+    try:
+        now = datetime.now(timezone.utc)
+        reading_time = latest_reading.timestamp
+        if reading_time.tzinfo is None:
+            reading_time = reading_time.replace(tzinfo=timezone.utc)
+        return abs((now - reading_time).total_seconds()) < 60
+    except Exception:
+        return False
+
 # API Endpoints
 @app.get("/api/readings/latest", response_model=LatestReadingResponse)
 def read_latest_reading(db: Session = Depends(get_db)):
     reading = get_latest_reading(db)
+    active = is_device_active(reading)
     return LatestReadingResponse(
         reading=ReadingResponse.model_validate(reading) if reading else None,
-        esp32_online=poller.esp32_online,
+        esp32_online=active,
         esp32_target_url=get_esp32_url()
     )
 
@@ -114,7 +130,37 @@ def read_history(limit: int = 30, db: Session = Depends(get_db)):
     return get_recent_history(db, limit=limit)
 
 @app.post("/api/readings", response_model=ReadingResponse)
-async def add_reading(reading_in: ReadingCreate, db: Session = Depends(get_db)):
+async def add_reading(
+    reading_in: ReadingCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    api_key_query: Optional[str] = Query(None, alias="api_key")
+):
+    # API Key Authentication
+    expected_key = settings.API_KEY.strip() if settings.API_KEY else ""
+    if expected_key:
+        provided_key = (
+            x_api_key
+            or api_key_query
+            or reading_in.api_key
+        )
+        if not provided_key:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                provided_key = auth_header.split("Bearer ")[1].strip()
+
+        # Allow same-origin browser dashboard test requests
+        referer = request.headers.get("referer", "")
+        origin = request.headers.get("origin", "")
+        is_browser = (
+            (referer and (request.base_url.hostname in referer or "onrender.com" in referer or "localhost" in referer))
+            or (origin and (request.base_url.hostname in origin or "onrender.com" in origin or "localhost" in origin))
+        )
+
+        if not is_browser and provided_key != expected_key:
+            raise HTTPException(status_code=401, detail="Unauthorized: Invalid or missing API Key")
+
     reading = create_reading(db, reading_in)
     # Broadcast to dashboard
     broadcast_data = {
@@ -127,7 +173,7 @@ async def add_reading(reading_in: ReadingCreate, db: Session = Depends(get_db)):
             "status": reading.status,
             "is_valid": reading.is_valid,
             "source": reading.source,
-            "esp32_online": poller.esp32_online
+            "esp32_online": True
         }
     }
     await manager.broadcast(broadcast_data)

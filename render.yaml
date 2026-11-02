@@ -14,8 +14,10 @@ services:
         value: 3.11.9
       - key: PYTHONPATH
         value: backend:.
-      - key: POLL_INTERVAL_SECONDS
-        value: 2.0
+      - key: API_KEY
+        value: smartbin_secret_key_2026
+      - key: ENABLE_POLLER
+        value: "false"
 
 databases:
   - name: smartbin-postgres
